@@ -1,5 +1,5 @@
 # pptxsanity
-Parse a PowerPoint PPTX file, extracting all URL's from notes and slides, and test for validity
+Parse a PowerPoint PPTX file, extracting all URL's from notes and slides, and test for validity returning ERR or the non-OK HTTP status code.
 
 ## Usage
 ```
