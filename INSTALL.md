@@ -9,7 +9,7 @@ $ pip install python-pptx
 ```
 
 ## Installing on Windows
-Windows users can download and run the EXE file included in the `bin/` directory.  Copy this file to a location in your PATH (I copy to C:\Tools - YMMV).
+Windows users can download and run the EXE file included in the `bin/` directory.  Copy this file to a location in your PATH (I copy to `C:\Tools` - YMMV).
 
 ## Questions, Comments, Concerns?
 
