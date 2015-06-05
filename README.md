@@ -1,5 +1,5 @@
 # pptxsanity
-Parse a PowerPoint PPTX file, extracting all URL's from notes and slides, and test for validity returning ERR or the non-OK HTTP status code.
+Parse a PowerPoint PPTX file, extracting all URLs from notes and slides, and test for validity returning ERR or the non-OK HTTP status code.
 
 ## Usage
 ```
@@ -17,8 +17,8 @@ ERR : https://localhost:8834
 404 : http://www.willhackforsushi.com/ios-key-recovery.pdf
 ```
 
-Pptxsanity searches all slide bullets and notes pages for URL's, and attempts to retrieve the URL.
-By default, URL's that are valid (e.g. that return a 200 OK message) are not displayed; all other URL's are displayed along
+Pptxsanity searches all slide bullets and notes pages for URLs, and attempts to retrieve the URL.
+By default, URLs that are valid (e.g. that return a 200 OK message) are not displayed; all other URLs are displayed along
 with the return code.  `ERR` indicates that the server could not be reached.  If you want to see each URL that is tested,
 set the environment variable `SKIP200` to `0`:
 
