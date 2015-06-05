@@ -42,7 +42,7 @@ ERR : http://www.ipbackupanalyzer.com
 
 ## Platforms
 
-Tested on Windows 8.1, OS X 10.10, and Debian-based Linux.  Windows binary included in the `bin/` directory, built with `C:\Python27\scripts\pyinstaller --onefile bitfit.py`.
+Tested on Windows 8.1, OS X 10.10, and Debian-based Linux.  Windows binary included in the `bin/` directory, built with `C:\Python27\scripts\pyinstaller --onefile pptxsanity.py`.
 
 ## Questions, Comments, Concerns?
 
