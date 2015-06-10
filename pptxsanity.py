@@ -18,10 +18,13 @@ from zipfile import ZipFile
 from xml.dom.minidom import parse
 import platform
 
-# Remove trailing unwanted characters from URL's
+# Remove trailing unwanted characters from the end of URL's
 # This is a recursive function. Did I do it well? I don't know.
 def striptrailingchar(s):
-    if s[-1] == "." or s[-1] == ")" or s[-1] == "," or s[-1] == ";" or s[-1] == "\\":
+    # The valid URL charset is A-Za-z0-9-._~:/?#[]@!$&'()*+,;= and & followed by hex character
+    # I don't have a better way to parse URL's from the cruft that I get from XML content, so I
+    # also remove .),;'? too.  Note that this is only the end of the URL (making ? OK to remove)
+    if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~:/#[]@!$&(*+=":
         s = striptrailingchar(s[0:-1])
     elif s[-5:] == "&quot":
         s = striptrailingchar(s[0:-5])
