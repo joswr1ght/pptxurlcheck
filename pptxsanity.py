@@ -9,6 +9,7 @@ from pptx import Presentation
 import sys
 import re
 import os
+import urlparse
 import shutil
 import glob
 import tempfile
@@ -17,6 +18,23 @@ import signal
 from zipfile import ZipFile
 from xml.dom.minidom import parse
 import platform
+from selenium import webdriver
+from PIL import Image
+from PIL import ImageFont
+from PIL import ImageDraw
+import traceback
+
+
+def unique_file(file_name):
+    counter = 1
+    file_name_parts = os.path.splitext(file_name) # returns ('/path/file', '.ext')
+    while 1:
+        if (not os.path.isfile(file_name)):
+            return file_name
+        else:
+            file_name = file_name_parts[0] + '_' + str(counter) + file_name_parts[1]
+            counter += 1
+
 
 # Remove trailing unwanted characters from the end of URL's
 # This is a recursive function. Did I do it well? I don't know.
@@ -101,21 +119,38 @@ def signal_exit(signal, frame):
     sys.exit(0)
 
 if __name__ == "__main__":
-    if (len(sys.argv) != 2):
+    opt_pptxfile = None
+    opt_renderdir = None
+
+    if (len(sys.argv) != 2 and len(sys.argv) != 4):
         print "Validate URLs in the notes and slides of a PowerPoint pptx file."
         print "Check GitHub for updates: http://github.com/joswr1ght/pptxsanity\n"
+        # There are instructions on how to write the Usage output:
+        # http://courses.cms.caltech.edu/cs11/material/general/usage.html
         if (platform.system() == 'Windows'):
-            print "Usage: pptxsanity.exe [pptx file]"
+            print "Usage: pptxsanity.exe pptxfile"
+            print "  pptxfile: The PowerPoint PPTX file"
         else:
-            print "Usage: pptxsanity.py [pptx file]"
+            print "Usage: pptxsanity.py [-r dir] pptxfile"
+            print "  pptxfile: The PowerPoint PPTX file"
+            print "  -r dir  : Render each retrieved web page as a PNG in the specified directory"
         sys.exit(1)
 
     signal.signal(signal.SIGINT, signal_exit)
-    
+
+    if (len(sys.argv) == 2):
+        opt_pptxfile = sys.argv[1]
+    elif sys.argv[1] == '-r':
+        opt_renderdir=sys.argv[2]
+        opt_pptxfile = sys.argv[3]
+        if (not os.path.exists(opt_renderdir)):
+            sys.stderr.write("Output directory " + opt_renderdir + " does not exist.\n")
+            sys.exit(-1)
     try:
-        prs = Presentation(sys.argv[1])
+        prs = Presentation(opt_pptxfile)
     except Exception:
-        sys.stderr.write("Invalid PPTX file: " + sys.argv[1] + "\n")
+        sys.stderr.write("Invalid PPTX file: " + opt_pptxfile + "\n")
+        sys.exit(-1)
     
     # This may be the most insane regex I've ever seen.  It's very comprehensive, but it's too aggressive for
     # what I want.  It matches arp:remote in ettercap -TqM arp:remote // //, so I'm using something simpler
@@ -127,7 +162,7 @@ if __name__ == "__main__":
     
     urls = []
     urls += parseslidetext(prs)
-    urls += parseslidenotes(sys.argv[1])
+    urls += parseslidenotes(opt_pptxfile)
 
     # De-duplicate URL's
     urls = list(set(urls))
@@ -141,18 +176,37 @@ if __name__ == "__main__":
         # Skip private IP addresses
         if re.match(privateaddr,url): continue
 
+        headers = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:35.0) Gecko/20100101 Firefox/35.0' }
         try:
-            headers = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:35.0) Gecko/20100101 Firefox/35.0' }
             #ul=urllib2.urlopen(url, timeout=TIMEOUT)
             req=urllib2.Request(url, None, headers)
             ul=urllib2.urlopen(req, timeout=TIMEOUT)
             code=ul.getcode()
+            if opt_renderdir:
+                try:
+                    driver = webdriver.PhantomJS()
+                    driver.set_window_size(1024,800)
+                    driver.get(url)
+                    imagefile=unique_file(opt_renderdir + "/" + urlparse.urlparse(url).netloc + ".png")
+                    driver.get_screenshot_as_file(imagefile)
+                    img=Image.open(imagefile)
+                    draw=ImageDraw.Draw(img)
+                    raw=ImageDraw.Draw(img)
+                    font=ImageFont.truetype("MesloLGLDZ-Regular.ttf",12)
+                    draw.text((1,1), url,(255,255,255),font=font)
+                    draw.text((0,0), url,(0,0,0),font=font)
+                    img2 = img.crop((0,0,1024,800))
+                    img2.save(imagefile)
+                except Exception, err:
+                    print(traceback.format_exc())
+                    #sys.stderr.write("Cannot render content for URL " + url + "\n")
+
             if code == 200 and SKIP200 == 1:
                 continue
             print str(code) + " : " + url
+
         except Exception, e:
             try:
                 print str(e.code) + " : " + url
             except Exception:
                 print "ERR : " + url
-
