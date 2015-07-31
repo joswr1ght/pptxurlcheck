@@ -145,7 +145,7 @@ if __name__ == "__main__":
             headers = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:35.0) Gecko/20100101 Firefox/35.0' }
             #ul=urllib2.urlopen(url, timeout=TIMEOUT)
             req=urllib2.Request(url, None, headers)
-            ul=urllib2.urlopen(req, timeout=10)
+            ul=urllib2.urlopen(req, timeout=TIMEOUT)
             code=ul.getcode()
             if code == 200 and SKIP200 == 1:
                 continue
