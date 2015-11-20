@@ -3,6 +3,8 @@
 #
 # With code by Eric Jang ericjang2004@gmail.com
 TIMEOUT=6 # URL request timeout in seconds
+MAXRETRY=4
+MAXREDIR=4
 SKIP200=1
 
 from pptx import Presentation
@@ -126,11 +128,20 @@ if __name__ == "__main__":
         sys.exit(1)
 
     signal.signal(signal.SIGINT, signal_exit)
+
+    # Disable urllib3 InsecureRequestWarning
+    try:
+        urllib3.disable_warnings()
+    except AttributeError:
+        sys.stdout.write("You need to upgrade your version of the urllib3 library to the latest available.\n");
+        sys.stdout.write("Try running the following command to upgrade urllib3: sudo pip install urllib3 --upgrade\n");
+        sys.exit(1)
     
     try:
         prs = Presentation(sys.argv[1])
     except Exception:
         sys.stderr.write("Invalid PPTX file: " + sys.argv[1] + "\n")
+        sys.exit(-1)
     
     # This may be the most insane regex I've ever seen.  It's very comprehensive, but it's too aggressive for
     # what I want.  It matches arp:remote in ettercap -TqM arp:remote // //, so I'm using something simpler
@@ -147,9 +158,10 @@ if __name__ == "__main__":
     # De-duplicate URL's
     urls = list(set(urls))
 
-    # Disable urllib3 InsecureRequestWarning
-    urllib3.disable_warnings()
     for url in urls:
+        if "whois.net" in url:
+            continue
+
         url = url.encode('ascii', 'ignore')
 
         # Add default URI for www.anything
@@ -158,22 +170,27 @@ if __name__ == "__main__":
         # Skip private IP addresses
         if re.match(privateaddr,url): continue
 
+        headers = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:35.0) Gecko/20100101 Firefox/35.0' }
+        retries=urllib3.Retry(redirect=4, total=4, connect=0, read=0)
+        http = urllib3.PoolManager(timeout=6, retries=retries)
         try:
-            headers = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:35.0) Gecko/20100101 Firefox/35.0' }
-            http = urllib3.PoolManager(timeout=TIMEOUT)
+            req=http.request('HEAD', url, headers=headers)
+            code=req.status
+        except Exception, e:
+            print "ERR : " + url
+            continue
+
+        # Some websites return 404 for HEAD requests (microsoft.com).  If we get a 404, try to retrieve using GET
+        # and report the corresponding response code.  Also check out 405 "Method not allowed" responses.
+        if code == 404 or code == 405:
+            # Stupid non-compliant web server
             try:
-                req=http.request('HEAD', url, headers=headers)
+                req=http.request('GET', url, headers=headers)
                 code=req.status
             except Exception, e:
                 print "ERR : " + url
                 continue
 
-            if code == 200 and SKIP200 == 1:
-                continue
-            print str(code) + " : " + url
-        except Exception, e:
-            try:
-                print str(e.code) + " : " + url
-            except Exception:
-                print "ERR : " + url
-
+        if code == 200 and SKIP200 == 1:
+            continue
+        print str(code) + " : " + url
