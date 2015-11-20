@@ -12,11 +12,28 @@ import os
 import shutil
 import glob
 import tempfile
-import urllib2
+import urllib3
+try:
+    import urllib3.contrib.pyopenssl
+    urllib3.contrib.pyopenssl.inject_into_urllib3()
+except ImportError:
+    pass
+
 import signal
 from zipfile import ZipFile
 from xml.dom.minidom import parse
 import platform
+import ssl
+from functools import wraps
+
+def sslwrap(func):
+    @wraps(func)
+    def bar(*args, **kw):
+        kw['ssl_version'] = ssl.PROTOCOL_TLSv1
+        return func(*args, **kw)
+    return bar
+
+
 
 # Remove trailing unwanted characters from the end of URL's
 # This is a recursive function. Did I do it well? I don't know.
@@ -24,7 +41,8 @@ def striptrailingchar(s):
     # The valid URL charset is A-Za-z0-9-._~:/?#[]@!$&'()*+,;= and & followed by hex character
     # I don't have a better way to parse URL's from the cruft that I get from XML content, so I
     # also remove .),;'? too.  Note that this is only the end of the URL (making ? OK to remove)
-    if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~:/#[]@!$&(*+=":
+    #if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~:/#[]@!$&(*+=":
+    if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~:#[]@!$&(*+=":
         s = striptrailingchar(s[0:-1])
     elif s[-5:] == "&quot":
         s = striptrailingchar(s[0:-5])
@@ -132,6 +150,8 @@ if __name__ == "__main__":
     # De-duplicate URL's
     urls = list(set(urls))
 
+    # Disable urllib3 InsecureRequestWarning
+    urllib3.disable_warnings()
     for url in urls:
         url = url.encode('ascii', 'ignore')
 
@@ -143,10 +163,14 @@ if __name__ == "__main__":
 
         try:
             headers = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:35.0) Gecko/20100101 Firefox/35.0' }
-            #ul=urllib2.urlopen(url, timeout=TIMEOUT)
-            req=urllib2.Request(url, None, headers)
-            ul=urllib2.urlopen(req, timeout=TIMEOUT)
-            code=ul.getcode()
+            http = urllib3.PoolManager(timeout=TIMEOUT)
+            try:
+                req=http.request('GET', url, headers=headers)
+                code=req.status
+            except Exception, e:
+                print "ERR : " + url
+                continue
+
             if code == 200 and SKIP200 == 1:
                 continue
             print str(code) + " : " + url
