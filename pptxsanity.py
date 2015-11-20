@@ -22,6 +22,7 @@ except ImportError:
 import signal
 from zipfile import ZipFile
 from xml.dom.minidom import parse
+import xml.etree.ElementTree as etree
 import platform
 import ssl
 from functools import wraps
@@ -59,24 +60,20 @@ def parseslidenotes(pptxfile):
 
     for infile in glob.glob(os.path.join(path, '*.xml')):
         #parse each XML notes file from the notes folder.
+
+        # Get the slide number
         dom = parse(infile)
         noteslist = dom.getElementsByTagName('a:t')
-        #separate last element of noteslist for use as the slide marking.
         slideNumber = noteslist.pop()
         slideNumber = slideNumber.toxml().replace('<a:t>', '').replace('</a:t>', '')
-        #start with this empty string to build the presenter note itself
-        text = ''
 
-        for node in noteslist:
-            xmlTag = node.toxml()
-            xmlData = xmlTag.replace('<a:t>', '').replace('</a:t>', '')
-            #concatenate the xmlData to the text for the particular slideNumber index.
-            text += " " + xmlData
+        # Parse slide notes, adding a space after each paragraph marker, and removing XML markup
+        s=dom.toxml().encode('ascii', 'ignore').replace("</a:p>","</a:p> ")
+        text = ''.join(etree.fromstring(s).itertext())
 
-        # Convert to ascii to simplify
-        text = text.encode('ascii', 'ignore')
+        # Parse URL content from notes text
         urlmatches = re.findall(urlmatchre,text)
-	if len(urlmatches) > 0:
+        if len(urlmatches) > 0:
             for match in urlmatches: # Now it's a tuple
                  for urlmatch in match:
                       if urlmatch != '':
@@ -165,7 +162,7 @@ if __name__ == "__main__":
             headers = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:35.0) Gecko/20100101 Firefox/35.0' }
             http = urllib3.PoolManager(timeout=TIMEOUT)
             try:
-                req=http.request('GET', url, headers=headers)
+                req=http.request('HEAD', url, headers=headers)
                 code=req.status
             except Exception, e:
                 print "ERR : " + url
