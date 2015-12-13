@@ -24,7 +24,6 @@ except ImportError:
 import signal
 from zipfile import ZipFile
 from xml.dom.minidom import parse
-import xml.etree.ElementTree as etree
 import platform
 import ssl
 from functools import wraps
@@ -53,7 +52,24 @@ def striptrailingchar(s):
         pass
     return s
 
+
+# Parse the given root recursively (root is intended to be the paragraph element <a:p>
+# If we encounter a link-break element a:br, add a new line to global paragraphtext
+# If we encounter an element with type TEXT_NODE, append value to paragraphtext
+paragraphtext=""
+def parse_node(root):
+    global paragraphtext
+    if root.childNodes:
+        for node in root.childNodes:
+            if node.nodeType == node.TEXT_NODE:
+                paragraphtext += node.nodeValue.encode('ascii', 'ignore')
+            if node.nodeType == node.ELEMENT_NODE:
+                if node.tagName == 'a:br':
+                    paragraphtext += "\n" 
+                parse_node(node)
+
 def parseslidenotes(pptxfile):
+    global paragraphtext
     urls = []
     tmpd = tempfile.mkdtemp()
 
@@ -70,16 +86,21 @@ def parseslidenotes(pptxfile):
         slideNumber = slideNumber.toxml().replace('<a:t>', '').replace('</a:t>', '')
 
         # Parse slide notes, adding a space after each paragraph marker, and removing XML markup
-        s=dom.toxml().encode('ascii', 'ignore').replace("</a:p>","</a:p> ")
-        text = ''.join(etree.fromstring(s).itertext())
+        paragraphs=dom.getElementsByTagName('a:p')
+        for paragraph in paragraphs:
+            paragraphtext=""
+            parse_node(paragraph)
 
-        # Parse URL content from notes text
-        urlmatches = re.findall(urlmatchre,text)
-        if len(urlmatches) > 0:
-            for match in urlmatches: # Now it's a tuple
-                 for urlmatch in match:
-                      if urlmatch != '':
-                          urls.append(striptrailingchar(urlmatch))
+#            print "DEBUG"
+#            print paragraphtext
+
+            # Parse URL content from notes text for the current paragraph
+            urlmatches = re.findall(urlmatchre, paragraphtext)
+            if len(urlmatches) > 0:
+                for match in urlmatches: # Now it's a tuple
+                     for urlmatch in match:
+                          if urlmatch != '':
+                              urls.append(striptrailingchar(urlmatch))
 
     # Remove all the files created with unzip
     shutil.rmtree(tmpd)
@@ -159,6 +180,7 @@ if __name__ == "__main__":
     urls = list(set(urls))
 
     for url in urls:
+        # OS X Bus Error Workaround #22
         if "whois.net" in url:
             continue
 
@@ -167,14 +189,25 @@ if __name__ == "__main__":
         # Add default URI for www.anything
         if url[0:3] == "www": url="http://"+url
 
+        # Some authors include URLs in the form http://www.josh.net.[1], http://www.josh.net[1]. or http://www.josh.net[1] 
+        # Remove the footnote and/or leading or trailing dot.
+        footnote=re.compile(r"(\.\[\d+\]|\[\d+\]\.|\[\d+\])")
+        if re.search(footnote, url):
+            url=re.sub(footnote, "", url)
+
+        # Remove a trailing period
+        if url[-1] == ".":
+            url = url[:-1]
+
         # Skip private IP addresses
         if re.match(privateaddr,url): continue
 
         headers = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:35.0) Gecko/20100101 Firefox/35.0' }
-        retries=urllib3.Retry(redirect=4, total=4, connect=0, read=0)
+        retries=urllib3.Retry(redirect=False, total=4, connect=0, read=0)
         http = urllib3.PoolManager(timeout=6, retries=retries)
         try:
-            req=http.request('HEAD', url, headers=headers)
+            #req=http.request('HEAD', url, headers=headers)
+            req=http.urlopen('HEAD', url, headers=headers, redirect=False)
             code=req.status
         except Exception, e:
             print "ERR : " + url
