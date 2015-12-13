@@ -181,8 +181,10 @@ if __name__ == "__main__":
 
     for url in urls:
         # OS X Bus Error Workaround #22
-        if "whois.net" in url:
-            continue
+        if platform.system() == "Darwin":
+            if "whois.net" in url or "isecpartners" in url:
+                print "Skipping URL for OSX bug workaround (%s)",url
+                continue
 
         url = url.encode('ascii', 'ignore')
 
@@ -202,6 +204,8 @@ if __name__ == "__main__":
         # Skip private IP addresses
         if re.match(privateaddr,url): continue
 
+        # Uncomment this debug line to print the URL before testing status to identify sites causing "Bus Error" fault on OSX
+        #print "DEBUG: %s"%url
         headers = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:35.0) Gecko/20100101 Firefox/35.0' }
         retries=urllib3.Retry(redirect=False, total=4, connect=0, read=0)
         http = urllib3.PoolManager(timeout=6, retries=retries)
