@@ -74,13 +74,13 @@ def parseslidenotes(pptxfile):
     tmpd = tempfile.mkdtemp()
 
     ZipFile(pptxfile).extractall(path=tmpd, pwd=None)
-    path = tmpd + '/ppt/notesSlides/'
+    path = tmpd + os.sep + 'ppt' + os.sep + 'notesSlides' + os.sep
 
     for infile in glob.glob(os.path.join(path, '*.xml')):
         #parse each XML notes file from the notes folder.
 
         # Get the slide number
-        slideNumber = re.match(".*notesSlides/notesSlide(\d+).xml", infile).group(1)
+        slideNumber = re.match(".*notesSlide(\d+).xml", infile).group(1)
 
         # Parse slide notes, adding a space after each paragraph marker, and removing XML markup
         dom = parse(infile)
@@ -231,4 +231,4 @@ if __name__ == "__main__":
                 continue
         elif code == 200 and SKIP200 == 1:
             continue
-        print str(code) + "," + url + "," + pagenum
+        print str(code) + " : " + url + ", Page " + pagenum
