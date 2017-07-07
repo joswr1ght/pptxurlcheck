@@ -80,19 +80,14 @@ def parseslidenotes(pptxfile):
         #parse each XML notes file from the notes folder.
 
         # Get the slide number
-        dom = parse(infile)
-        noteslist = dom.getElementsByTagName('a:t')
-        slideNumber = noteslist.pop()
-        slideNumber = slideNumber.toxml().replace('<a:t>', '').replace('</a:t>', '')
+        slideNumber = re.match(".*notesSlides/notesSlide(\d+).xml", infile).group(1)
 
         # Parse slide notes, adding a space after each paragraph marker, and removing XML markup
+        dom = parse(infile)
         paragraphs=dom.getElementsByTagName('a:p')
         for paragraph in paragraphs:
             paragraphtext=""
             parse_node(paragraph)
-
-#            print "DEBUG"
-#            print paragraphtext
 
             # Parse URL content from notes text for the current paragraph
             urlmatches = re.findall(urlmatchre, paragraphtext)
@@ -100,7 +95,7 @@ def parseslidenotes(pptxfile):
                 for match in urlmatches: # Now it's a tuple
                      for urlmatch in match:
                           if urlmatch != '':
-                              urls.append(striptrailingchar(urlmatch))
+                              urls.append([striptrailingchar(urlmatch), slideNumber])
 
     # Remove all the files created with unzip
     shutil.rmtree(tmpd)
@@ -110,7 +105,9 @@ def parseslidenotes(pptxfile):
 def parseslidetext(prs):
     urls = []
     nexttitle = False
+    slidenum=0
     for slide in prs.slides:
+        slidenum+=1
         text_runs = []
         for shape in slide.shapes:
             try:
@@ -132,7 +129,7 @@ def parseslidetext(prs):
                 if m != None:
                     url = striptrailingchar(m.groups()[0])
                     if url not in urls:
-                        urls.append(url)
+                        urls.append([url,slidenum])
     return urls
 
 def signal_exit(signal, frame):
@@ -177,9 +174,14 @@ if __name__ == "__main__":
     urls += parseslidenotes(sys.argv[1])
 
     # De-duplicate URL's
-    urls = list(set(urls))
+    urls = [list(x) for x in set(tuple(x) for x in urls)]
 
-    for url in urls:
+    # For identical URL's that appear on different pages, remote the duplicate entries and combine page numbers as CSVs
+    # TODO
+
+    for urldata in urls:
+        url = urldata[0]
+        pagenum = urldata[1]
         # OS X Bus Error Workaround #22
         if platform.system() == "Darwin":
             if "whois.net" in url or "isecpartners" in url:
@@ -227,7 +229,6 @@ if __name__ == "__main__":
             except Exception, e:
                 print "ERR : " + url
                 continue
-
-        if code == 200 and SKIP200 == 1:
+        elif code == 200 and SKIP200 == 1:
             continue
-        print str(code) + " : " + url
+        print str(code) + "," + url + "," + pagenum
