@@ -139,7 +139,7 @@ def signal_exit(signal, frame):
 
 if __name__ == "__main__":
     if (len(sys.argv) != 2):
-        print "Validate URLs in the notes and slides of a PowerPoint pptx file."
+        print "Validate URLs in the notes and slides of a PowerPoint pptx file. (version 1.1)"
         print "Check GitHub for updates: http://github.com/joswr1ght/pptxsanity\n"
         if (platform.system() == 'Windows'):
             print "Usage: pptxsanity.exe [pptx file]"
