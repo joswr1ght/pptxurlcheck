@@ -105,6 +105,7 @@ def parseslidenotes(pptxfile):
 def parseslidetext(prs):
     urls = []
     nexttitle = False
+    singletextrun=""
     slidenum=0
     for slide in prs.slides:
         slidenum+=1
@@ -118,7 +119,8 @@ def parseslidetext(prs):
                 sys.exit(-1)
             for paragraph in shape.text_frame.paragraphs:
                 for run in paragraph.runs:
-                    text_runs.append(run.text)
+                    singletextrun += run.text
+                text_runs.append(singletextrun)
 
             for text in text_runs:
                 if text == None : continue
@@ -232,3 +234,8 @@ if __name__ == "__main__":
         elif code == 200 and SKIP200 == 1:
             continue
         print str(code) + " : " + url + ", Page " + pagenum
+
+    if os.name == 'nt':
+        x=raw_input("Press Enter to exit.")
+
+
