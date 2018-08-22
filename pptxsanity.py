@@ -44,7 +44,7 @@ def striptrailingchar(s):
     # I don't have a better way to parse URL's from the cruft that I get from XML content, so I
     # also remove .),;'? too.  Note that this is only the end of the URL (making ? OK to remove)
     #if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~:/#[]@!$&(*+=":
-    if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~:#[]@!$&(*+=":
+    if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~:#[]@!$&(*+=/":
         s = striptrailingchar(s[0:-1])
     elif s[-5:] == "&quot":
         s = striptrailingchar(s[0:-5])
