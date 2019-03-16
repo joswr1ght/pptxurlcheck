@@ -15,6 +15,7 @@ import shutil
 import glob
 import tempfile
 import urllib3
+import pdb
 try:
     import urllib3.contrib.pyopenssl
     urllib3.contrib.pyopenssl.inject_into_urllib3()
@@ -62,7 +63,7 @@ def parse_node(root):
     if root.childNodes:
         for node in root.childNodes:
             if node.nodeType == node.TEXT_NODE:
-                paragraphtext += node.nodeValue.encode('ascii', 'ignore')
+                paragraphtext += node.nodeValue.encode('ascii', 'ignore').decode('utf-8')
             if node.nodeType == node.ELEMENT_NODE:
                 if node.tagName == 'a:br':
                     paragraphtext += "\n" 
@@ -126,7 +127,7 @@ def parseslidetext(prs):
                 if text == None : continue
                 try:
                     m = re.match(urlmatchre,text)
-                except IndexError,TypeError:
+                except IndexError as TypeError:
                     continue
                 if m != None:
                     url = striptrailingchar(m.groups()[0])
@@ -139,12 +140,12 @@ def signal_exit(signal, frame):
 
 if __name__ == "__main__":
     if (len(sys.argv) != 2):
-        print "Validate URLs in the notes and slides of a PowerPoint pptx file. (version 1.1)"
-        print "Check GitHub for updates: http://github.com/joswr1ght/pptxsanity\n"
+        print("Validate URLs in the notes and slides of a PowerPoint pptx file. (version 1.1)")
+        print("Check GitHub for updates: http://github.com/joswr1ght/pptxsanity\n")
         if (platform.system() == 'Windows'):
-            print "Usage: pptxsanity.exe [pptx file]"
+            print("Usage: pptxsanity.exe [pptx file]")
         else:
-            print "Usage: pptxsanity.py [pptx file]"
+            print("Usage: pptxsanity.py [pptx file]")
         sys.exit(1)
 
     signal.signal(signal.SIGINT, signal_exit)
@@ -187,10 +188,10 @@ if __name__ == "__main__":
         # OS X Bus Error Workaround #22
         if platform.system() == "Darwin":
             if "whois.net" in url or "isecpartners" in url:
-                print "Skipping URL for OSX bug workaround (%s)",url
+                print("Skipping URL for OSX bug workaround (%s)",url)
                 continue
 
-        url = url.encode('ascii', 'ignore')
+        url = url.encode('ascii', 'ignore').decode('utf-8')
 
         # Add default URI for www.anything
         if url[0:3] == "www": url="http://"+url
@@ -206,7 +207,7 @@ if __name__ == "__main__":
             url = url[:-1]
 
         # Skip private IP addresses
-        if re.match(privateaddr,url): continue
+        if re.match(privateaddr, url): continue
 
         # Uncomment this debug line to print the URL before testing status to identify sites causing "Bus Error" fault on OSX
         #print "DEBUG: %s"%url
@@ -217,8 +218,8 @@ if __name__ == "__main__":
             #req=http.request('HEAD', url, headers=headers)
             req=http.urlopen('HEAD', url, headers=headers, redirect=False)
             code=req.status
-        except Exception, e:
-            print "ERR : " + url
+        except Exception as e:
+            print("ERR : " + url)
             continue
 
         # Some websites return 404 for HEAD requests (microsoft.com).  If we get a 404, try to retrieve using GET
@@ -228,14 +229,22 @@ if __name__ == "__main__":
             try:
                 req=http.request('GET', url, headers=headers)
                 code=req.status
-            except Exception, e:
-                print "ERR : " + url
+            except Exception as e:
+                print("ERR : " + url)
                 continue
-        elif code == 200 and SKIP200 == 1:
+        elif code == 302 or code == 301:
+            # Do I still get a redirect if I add a trailing / ?
+            try:
+                req=http.request('HEAD', url + "/", headers=headers)
+                code=req.status
+            except Exception as e:
+                print("ERR : " + url)
+                continue
+        if code == 200 and SKIP200 == 1:
             continue
-        print str(code) + " : " + url + ", Page " + pagenum
+        print(str(code) + " : " + url + ", Page " + pagenum)
 
     if os.name == 'nt':
-        x=raw_input("Press Enter to exit.")
+        x=input("Press Enter to exit.")
 
 
