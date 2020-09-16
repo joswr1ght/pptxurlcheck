@@ -1,0 +1,10 @@
+# Changelog
+
+## 1.2
+
+  + Removed dependency on python-pptx, adding code to parse slide bullets
+  + Updated User-Agent to modern Chrome on macOS
+  + Change request to GET from HEAD (more overhead, but more reliable server
+    responses)
+  + Change timeout to 1 request over 10 seconds
+

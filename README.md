@@ -1,20 +1,20 @@
 # pptxsanity
-Parse a PowerPoint PPTX file, extracting all URLs from notes and slides, and test for validity returning ERR or the non-OK HTTP status code.
+
+Parse a PowerPoint PPTX file, extracting all URLs from notes and slides, and
+test for validity returning ERR or the non-OK HTTP status code.
 
 ## Usage
+
 ```
 $ python pptxsanity.py
-Validate URLs in the notes and slides of a PowerPoint pptx file.
+Validate URLs in the notes and slides of a PowerPoint pptx file. (version 1.2)
 Check GitHub for updates: http://github.com/joswr1ght/pptxsanity
 
 Usage: pptxsanity.py [pptx file]
 $ python pptxsanity.py SEC561.pptx
-ERR : http://www.ipbackupanalyzer.com
-403 : http://java.decompiler.free.fr/?q=jdgui
-ERR : http://host/u.php?id=u1
-404 : http://securityweekly.com/2011/11/safely-dumping-hashes-from-liv.html
-ERR : https://localhost:8834
-404 : http://www.willhackforsushi.com/ios-key-recovery.pdf
+$ ./pptxsanity.py ~/Dropbox\ \(SANS\)/SEC504/SEC504-F02/SEC504_2_F01_01.pptx
+ERR : http://www.[target_company].com, Page 41
+404 : http://bit.ly/14GZzcT, Page 87
 ```
 
 Pptxsanity searches all slide bullets and notes pages for URLs, and attempts to retrieve the URL.
@@ -30,7 +30,7 @@ ERR : http://www.ipbackupanalyzer.com
 200 : http://www.cclgroupltd.com/Buy-Software/other-software-a-scripts.html
 ```
 
-Windows users will set an envionment variable before running the command:
+Windows users will set an environment variable before running the command:
 ```
 C:\>set SKIP200=0
 C:\>pptxsanity SEC561.pptx
@@ -42,11 +42,12 @@ ERR : http://www.ipbackupanalyzer.com
 
 ## Platforms
 
-Tested on Windows 8.1, OS X 10.10, and Debian-based Linux.  Windows binary included in the `bin/` directory, built with `C:\Python27\scripts\pyinstaller --onefile pptxsanity.py`.
+Tested on Windows 10, OS X 10.14, and Debian-based Linux. Windows binary
+included in the `bin/` directory, built with `C:\Python38\scripts\pyinstaller
+--onefile pptxsanity.py`.
 
 ## Questions, Comments, Concerns?
 
 Open a ticket, or drop me a note: jwright@hasborg.com.
 
 -Josh
-
