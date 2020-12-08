@@ -11,7 +11,6 @@ import shutil
 import glob
 import tempfile
 import urllib3
-#import pdb
 
 # Attempt to add SNI support
 try:
@@ -212,18 +211,6 @@ if __name__ == "__main__":
                 print(f"ERR : {url}, Page {page}")
                 continue
 
-            if (code == 302 or code == 301):
-                # Do I still get a redirect if I add a trailing / ?
-                redircode=None
-                try:
-                    req=http.request('GET', url + "/", headers=headers)
-                    redircode=req.status
-                    if (redircode == 200 and SKIP200 == 1):
-                        # Adding a / to the end of the URL eliminated the redirect; skip this valid URL
-                        continue
-                except Exception as e:
-                    print(f"ERR : {url}, Page {page}")
-                    continue
             if code == 200 and SKIP200 == 1:
                 continue
             print(f"{code} : {url}, Page {page}")
