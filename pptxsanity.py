@@ -11,6 +11,11 @@ import shutil
 import glob
 import tempfile
 import urllib3
+import csv
+import pdb
+
+MAXREDIRECT=10
+MAXTIMEOUT=5
 
 # Attempt to add SNI support
 try:
@@ -29,7 +34,7 @@ def striptrailingchar(s):
     # The valid URL charset is A-Za-z0-9-._~:/?#[]@!$&'()*+,;= and & followed by hex character
     # I don't have a better way to parse URL's from the cruft that I get from XML content, so I
     # also remove .),;'? too.  Note that this is only the end of the URL (making ? OK to remove)
-    if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~:#[]@!$&(*+=/":
+    if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~:#[]@!$&()*+=/":
         s = striptrailingchar(s[0:-1])
     elif s[-5:] == "&quot":
         s = striptrailingchar(s[0:-5])
@@ -146,35 +151,7 @@ def parseslidenotes(pptxfile):
 def signal_exit(signal, frame):
     sys.exit(0)
 
-if __name__ == "__main__":
-    if (len(sys.argv) != 2):
-        print("Validate URLs in the notes and slides of a PowerPoint pptx file. (version 1.2)")
-        print("Check GitHub for updates: http://github.com/joswr1ght/pptxsanity\n")
-        if os.name == 'nt':
-            print("Usage: pptxsanity.exe [pptx file]")
-        else:
-            print("Usage: pptxsanity.py [pptx file]")
-        sys.exit(1)
-
-    signal.signal(signal.SIGINT, signal_exit)
-
-    # Disable urllib3 InsecureRequestWarning
-    try:
-        urllib3.disable_warnings()
-    except AttributeError:
-        sys.stdout.write("You need to upgrade your version of the urllib3 library to the latest available.\n");
-        sys.stdout.write("Try running the following command to upgrade urllib3: sudo pip install urllib3 --upgrade\n");
-        sys.exit(1)
-
-
-    SKIP200=int(os.getenv('SKIP200', 1))
-
-    urls = parseslidenotes(sys.argv[1])
-
-    # Deduplicate URLs on a single page (but not across pages)
-    for key in urls:
-        urls[key] = list(dict.fromkeys(urls[key]))
-
+def testurls(urls, csvwriter):
     for page in sorted(urls.keys()):
         for url in urls[page]:
 
@@ -182,7 +159,7 @@ if __name__ == "__main__":
 
             # Add default URI for www.anything
             if url[0:3] == "www": url="http://"+url
-    
+
             # Some authors include URLs in the form http://www.josh.net.[1], http://www.josh.net[1]. or http://www.josh.net[1] 
             # Remove the footnote and/or leading or trailing dot.
             footnote=re.compile(r"(\.\[\d+\]|\[\d+\]\.|\[\d+\])")
@@ -198,22 +175,63 @@ if __name__ == "__main__":
             if re.match(privateaddr, url): continue
             if ("://localhost" in url): continue
 
-            # Uncomment this debug line to print the URL before testing status to identify sites causing "Bus Error" fault on OSX
-            #print "DEBUG: %s"%url
             headers = { 'User-Agent' : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36' }
-            retries=urllib3.Retry(redirect=False, total=1, connect=0, read=0)
-            http = urllib3.PoolManager(timeout=10, retries=retries)
+            http = urllib3.PoolManager(timeout=MAXTIMEOUT)
             try:
-                #req=http.request('HEAD', url, headers=headers)
-                req=http.urlopen('GET', url, headers=headers, redirect=False)
-                code=req.status
+                r=http.request('GET', url, headers=headers, retries=urllib3.Retry(redirect=MAXREDIRECT))
+                code=r.status
+            except urllib3.exceptions.ConnectionTimeoutError as e:
+                print(f"ERR : {url}, Page {page}")
+                csvwriter.writerow([page, "ERR", url, f"Timeout of {MAXTIMEOUT} seconds exceeded connecting to server"])
+                continue
+            except urllib3.exceptions.ReadTimeoutError as e:
+                print(f"ERR : {url}, Page {page}")
+                csvwriter.writerow([page, "ERR", url, f"Timeout of {MAXTIMEOUT} seconds exceeded waiting for read response"])
+                continue
+            except urllib3.exceptions.MaxRetryError as e:
+                print(f"ERR : {url}, Page {page}")
+                csvwriter.writerow([page, "ERR", url, f"URL redirects exceed {MAXREDIRECT}"])
+                continue
             except Exception as e:
                 print(f"ERR : {url}, Page {page}")
+                csvwriter.writerow([page, "ERR", url, "Error accessing URL"])
                 continue
 
             if code == 200 and SKIP200 == 1:
                 continue
+
             print(f"{code} : {url}, Page {page}")
+            csvwriter.writerow([page, code, url])
+
+if __name__ == "__main__":
+    if (len(sys.argv) != 2):
+        print("Validate URLs in the notes and slides of a PowerPoint pptx file. (version 1.2)")
+        print("Check GitHub for updates: http://github.com/joswr1ght/pptxsanity\n")
+        if os.name == 'nt':
+            print("Usage: pptxsanity.exe [pptx file]")
+        else:
+            print("Usage: pptxsanity.py [pptx file]")
+        sys.exit(1)
+
+    signal.signal(signal.SIGINT, signal_exit)
+
+    # Disable urllib3 InsecureRequestWarning
+    urllib3.disable_warnings()
+
+    SKIP200=int(os.getenv('SKIP200', 1))
+
+    urls = parseslidenotes(sys.argv[1])
+
+    with open(f"{os.path.splitext(sys.argv[1])[0]}-URLREPORT.csv", mode='w') as csv_report:
+        csvwriter = csv.writer(csv_report)
+        csvwriter.writerow(["Page","Response","URL","Note"])
+
+        # Deduplicate URLs on a single page (but not across pages)
+        for key in urls:
+            urls[key] = list(dict.fromkeys(urls[key]))
+
+        testurls(urls, csvwriter)
+
 
     if os.name == 'nt':
         x=input("Press Enter to exit.")
