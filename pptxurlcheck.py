@@ -151,7 +151,7 @@ def parseslidenotes(pptxfile):
 def signal_exit(signal, frame):
     sys.exit(0)
 
-def testurls(urls, csvwriter):
+def testurls(urls, csvwriter, filenum):
     for page in sorted(urls.keys()):
         for url in urls[page]:
 
@@ -180,31 +180,34 @@ def testurls(urls, csvwriter):
             try:
                 r=http.request('GET', url, headers=headers, retries=urllib3.Retry(redirect=MAXREDIRECT))
                 code=r.status
-            except urllib3.exceptions.ConnectionTimeoutError as e:
+            except urllib3.exceptions.ConnectTimeoutError as e:
                 print(f"ERR : {url}, Page {page}")
-                csvwriter.writerow([page, "ERR", url, f"Timeout of {MAXTIMEOUT} seconds exceeded connecting to server"])
+                csvwriter.writerow([filenum, page, "ERR", url,
+                        f"Timeout of {MAXTIMEOUT} seconds exceeded connecting to server"])
                 continue
             except urllib3.exceptions.ReadTimeoutError as e:
                 print(f"ERR : {url}, Page {page}")
-                csvwriter.writerow([page, "ERR", url, f"Timeout of {MAXTIMEOUT} seconds exceeded waiting for read response"])
+                csvwriter.writerow([filenum, page, "ERR", url,
+                        f"Timeout of {MAXTIMEOUT} seconds exceeded waiting for read response"])
                 continue
             except urllib3.exceptions.MaxRetryError as e:
                 print(f"ERR : {url}, Page {page}")
-                csvwriter.writerow([page, "ERR", url, f"URL redirects exceed {MAXREDIRECT}"])
+                csvwriter.writerow([filenum, page, "ERR", url, f"Maximum redirect of {MAXREDIRECT} exceeded"])
                 continue
             except Exception as e:
                 print(f"ERR : {url}, Page {page}")
-                csvwriter.writerow([page, "ERR", url, "Error accessing URL"])
+                csvwriter.writerow([filenum, page, "ERR", url, "Error accessing URL"])
                 continue
 
+            # By default we don't report on URLs that return a 200 message, but this can be overidden with an env var
             if code == 200 and SKIP200 == 1:
                 continue
 
-            print(f"{code} : {url}, Page {page}")
-            csvwriter.writerow([page, code, url])
+            print(f"{code} : {url}, Page {filenum}:{page}")
+            csvwriter.writerow([filenum, page, code, url])
 
 if __name__ == "__main__":
-    if (len(sys.argv) != 2):
+    if (len(sys.argv) == 1):
         print("Validate URLs in the notes and slides of a PowerPoint pptx file. (version 1.2)")
         print("Check GitHub for updates: http://github.com/joswr1ght/pptxurlcheck\n")
         if os.name == 'nt':
@@ -220,18 +223,20 @@ if __name__ == "__main__":
 
     SKIP200=int(os.getenv('SKIP200', 1))
 
-    urls = parseslidenotes(sys.argv[1])
-
+    filenum=0
     with open(f"{os.path.splitext(sys.argv[1])[0]}-URLREPORT.csv", mode='w') as csv_report:
         csvwriter = csv.writer(csv_report)
-        csvwriter.writerow(["Page","Response","URL","Note"])
+        csvwriter.writerow(["File#","Page","Response","URL","Note"])
 
-        # Deduplicate URLs on a single page (but not across pages)
-        for key in urls:
-            urls[key] = list(dict.fromkeys(urls[key]))
+        for pptxfile in sys.argv[1:]:
+            filenum+=1
+            urls = parseslidenotes(pptxfile)
 
-        testurls(urls, csvwriter)
+            # Deduplicate URLs on a single page (but not across pages)
+            for key in urls:
+                urls[key] = list(dict.fromkeys(urls[key]))
 
+            testurls(urls, csvwriter, filenum)
 
     if os.name == 'nt':
         x=input("Press Enter to exit.")
