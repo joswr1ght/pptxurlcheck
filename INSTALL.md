@@ -1,11 +1,11 @@
-# pptxsanity
+# pptxrlcheck
 
 Parse a PowerPoint PPTX file, extracting all URLs from notes and slides, and
 test for validity returning ERR or the non-OK HTTP status code.
 
 ## Installing on Linux or OS X
 
-No separate modules are required. Just run `python pptxsanity.py`.
+No separate modules are required. Just run `python pptxurlcheck.py`.
 
 ## Installing on Windows
 
