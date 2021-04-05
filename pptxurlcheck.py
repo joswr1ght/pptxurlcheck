@@ -206,11 +206,11 @@ def testurls(urls, csvwriter):
 if __name__ == "__main__":
     if (len(sys.argv) != 2):
         print("Validate URLs in the notes and slides of a PowerPoint pptx file. (version 1.2)")
-        print("Check GitHub for updates: http://github.com/joswr1ght/pptxsanity\n")
+        print("Check GitHub for updates: http://github.com/joswr1ght/pptxurlcheck\n")
         if os.name == 'nt':
-            print("Usage: pptxsanity.exe [pptx file]")
+            print("Usage: pptxurlcheck.exe [pptx file]")
         else:
-            print("Usage: pptxsanity.py [pptx file]")
+            print("Usage: pptxurlcheck.py [pptx file]")
         sys.exit(1)
 
     signal.signal(signal.SIGINT, signal_exit)
