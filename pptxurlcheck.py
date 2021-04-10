@@ -8,14 +8,20 @@ import sys
 import re
 import os
 import shutil
-import glob
 import tempfile
 import urllib3
+import glob
 import csv
-import pdb
+import concurrent.futures
+import requests
+#import pdb
+import signal
+from zipfile import ZipFile
+from xml.dom.minidom import parse
 
 MAXREDIRECT=10
-MAXTIMEOUT=5
+TIMEOUT=5
+CONNECTIONS=20
 
 # Attempt to add SNI support
 try:
@@ -24,9 +30,6 @@ try:
 except ImportError:
     pass
 
-import signal
-from zipfile import ZipFile
-from xml.dom.minidom import parse
 
 # Remove trailing unwanted characters from the end of URL's
 # This is a recursive function. Did I do it well? I don't know.
@@ -59,161 +62,167 @@ def parse_node(root):
                 parse_node(node)
 
 
-# Return a hash of links in the urls object indexed by page number
-# Read from slide notes and slide text boxes and other text elements
-def parseslidenotes(pptxfile):
+# Accepts a list of PowerPoint files in pptxfiles.
+# Returns a hash of links indexed by URL with [filenum,pagenum] as the value.
+# Reads slide notes and slide text boxes and other text elements.
+def parsepptx(pptxfiles):
     global paragraphtext
-
-    # This may be the most insane regex I've ever seen.  It's very comprehensive, but it's too aggressive for
-    # what I want.  It matches arp:remote in ettercap -TqM arp:remote // //, so I'm using something simpler
-    #urlmatchre = re.compile(r"""((?:[a-z][\w-]+:(?:/{1,3}|[a-z0-9%])|www\d{0,3}[.]|[a-z0-9.\-]+[.‌​][a-z]{2,4}/)(?:[^\s()<>]+|(([^\s()<>]+|(([^\s()<>]+)))*))+(?:(([^\s()<>]+|(‌​([^\s()<>]+)))*)|[^\s`!()[]{};:'".,<>?«»“”‘’]))""", re.DOTALL)
     urlmatchre = re.compile(r'((https?://[^\s<>"]+|www\.[^\s<>"]+))',re.DOTALL)
     urls = {}
+    filenum=0
 
-    tmpd = tempfile.mkdtemp()
-    ZipFile(pptxfile).extractall(path=tmpd, pwd=None)
+    for pptxfile in pptxfiles:
+        filenum+=1
 
-    # Parse slide content first
-    path = tmpd + os.sep + 'ppt' + os.sep + 'slides' + os.sep
-    for infile in glob.glob(os.path.join(path, '*.xml')):
-        #parse each XML notes file from the notes folder.
-        slideText = ''
-        slideNumber = re.sub(r'\D', "", infile.split(os.sep)[-1])
-        dom = parse(infile)
+        tmpd = tempfile.mkdtemp()
+        try:
+            ZipFile(pptxfile).extractall(path=tmpd, pwd=None)
+        except Exception as e:
+            printerrex(f"Cannot extract data from specified PowerPoint file {pptxfile}: f{sys.exc_info()}. Exiting.")
 
-        # In slides, content is grouped by paragraph using <a:p>
-        # Within the paragraph, there are multiple text blocks denoted as <a:t>
-        # For each paragraph, concatenate all of the text blocks without whitespace,
-        # then concatenate each paragraph delimited by a space.
-        paragraphs = dom.getElementsByTagName('a:p')
-        for paragraph in paragraphs:
-            textblocks = paragraph.getElementsByTagName('a:t')
-            for textblock in textblocks:
-                slideText += textblock.toxml().replace('<a:t>','').replace('</a:t>','')
-            slideText += " "
+        # Parse slide content first
+        path = tmpd + os.sep + 'ppt' + os.sep + 'slides' + os.sep
+        for infile in glob.glob(os.path.join(path, '*.xml')):
+            #parse each XML notes file from the notes folder.
+            slideText = ''
+            slidenum = int(re.sub(r'\D', "", infile.split(os.sep)[-1]))
+            dom = parse(infile)
 
-        # Parse URL content from notes text for the current paragraph
-        urlmatches = re.findall(urlmatchre, slideText)
-        for urlmatch in urlmatches:  # Now it's a tuple
-            # Remove regex artifacts at the end of the URL: www.sans.org,
-            url = striptrailingchar(urlmatch[0])
-
-            # Add default URI for www.anything
-            if url[0:3] == "www":
-                url = "http://" + url
-
-            # Add this URL to the hash
-            slideNumber = int(slideNumber)
-            if (slideNumber in urls):
-                urls[slideNumber].append(url)
-            else:
-                urls[slideNumber] = [url]
-
-
-    # Process notes content in slides
-    path = tmpd + os.sep + 'ppt' + os.sep + 'notesSlides' + os.sep
-    for infile in glob.glob(os.path.join(path, '*.xml')):
-        # parse each XML notes file from the notes folder.
-
-        # Get the slide number
-        slideNumber = re.search("notesSlide(\d+)\.xml", infile).group(1)
-
-        # Parse slide notes, adding a space after each paragraph marker, and
-        # removing XML markup
-        dom = parse(infile)
-        paragraphs = dom.getElementsByTagName('a:p')
-        for paragraph in paragraphs:
-            paragraphtext = ""
-            parse_node(paragraph)
+            # In slides, content is grouped by paragraph using <a:p>
+            # Within the paragraph, there are multiple text blocks denoted as <a:t>
+            # For each paragraph, concatenate all of the text blocks without whitespace,
+            # then concatenate each paragraph delimited by a space.
+            paragraphs = dom.getElementsByTagName('a:p')
+            for paragraph in paragraphs:
+                textblocks = paragraph.getElementsByTagName('a:t')
+                for textblock in textblocks:
+                    slideText += textblock.toxml().replace('<a:t>','').replace('</a:t>','')
+                slideText += " "
 
             # Parse URL content from notes text for the current paragraph
-            urlmatches = re.findall(urlmatchre, paragraphtext)
-            for urlmatch in urlmatches:  # Now it's a tuple
+            urlmatches = re.findall(urlmatchre, slideText)
 
-                # Remove regex artifacts at the end of the URL: www.sans.org,
+            for urlmatch in urlmatches:  # Now it's a tuple
+                # Remove regex match artifacts at the end of the URL: www.sans.org,
                 url = striptrailingchar(urlmatch[0])
 
                 # Add default URI for www.anything
                 if url[0:3] == "www":
                     url = "http://" + url
 
-                # Add this URL to the hash
-                slideNumber = int(slideNumber)
-                if (slideNumber in urls):
-                    urls[slideNumber].append(url)
-                else:
-                    urls[slideNumber] = [url]
+                # Remove a trailing period
+                if url[-1] == ".":
+                    url = url[:-1]
 
-    # Remove all the files created with unzip
-    shutil.rmtree(tmpd)
+                # Skip private IP addresses and localhost
+                privateaddr = re.compile(r'(\S+127\.)|(\S+192\.168\.)|(\S+10\.)|(\S+172\.1[6-9]\.)|(\S+172\.2[0-9]\.)|(\S+172\.3[0-1]\.)|(\S+::1)')
+                if re.match(privateaddr, url):
+                    continue
+
+                url = url.encode('ascii', 'ignore').decode('utf-8')
+
+                # Add this URL to the hash
+                if not url in urls:
+                    urls[url] = [filenum, slidenum]
+
+
+        # Process notes content in slides
+        path = tmpd + os.sep + 'ppt' + os.sep + 'notesSlides' + os.sep
+        for infile in glob.glob(os.path.join(path, '*.xml')):
+            # parse each XML notes file from the notes folder.
+
+            # Get the slide number
+            slidenum = int(re.search("notesSlide(\d+)\.xml", infile).group(1))
+
+            # Parse slide notes, adding a space after each paragraph marker, and
+            # removing XML markup
+            dom = parse(infile)
+            paragraphs = dom.getElementsByTagName('a:p')
+            for paragraph in paragraphs:
+                paragraphtext = ""
+                parse_node(paragraph)
+
+                # Parse URL content from notes text for the current paragraph
+                urlmatches = re.findall(urlmatchre, paragraphtext)
+
+                for urlmatch in urlmatches:  # Now it's a tuple
+                    # Remove regex match artifacts at the end of the URL: www.sans.org,
+                    url = striptrailingchar(urlmatch[0])
+
+                    # Add default URI for www.anything
+                    if url[0:3] == "www":
+                        url = "http://" + url
+
+                    # Remove a trailing period
+                    if url[-1] == ".":
+                        url = url[:-1]
+
+                    # Some authors include URLs in the form
+                    # http://www.josh.net.[1], http://www.josh.net[1]. or
+                    # http://www.josh.net[1] Remove the footnote and/or leading
+                    # or trailing dot (this really only happens in notes)
+                    footnote=re.compile(r"(\.\[\d+\]|\[\d+\]\.|\[\d+\])")
+                    if re.search(footnote, url):
+                        url=re.sub(footnote, "", url)
+
+                    # Skip private IP addresses and localhost
+                    privateaddr = re.compile(r'(\S+127\.)|(\S+192\.168\.)|(\S+10\.)|(\S+172\.1[6-9]\.)|(\S+172\.2[0-9]\.)|(\S+172\.3[0-1]\.)|(\S+::1)')
+                    if re.match(privateaddr, url):
+                        continue
+
+                    url = url.encode('ascii', 'ignore').decode('utf-8')
+
+                    # Add this URL to the hash
+                    if not url in urls:
+                        urls[url] = [filenum, slidenum]
+
+        # Remove all the files created with unzip
+        shutil.rmtree(tmpd)
+
     return urls
 
 def signal_exit(signal, frame):
     sys.exit(0)
 
-def testurls(urls, csvwriter, filenum):
-    for page in sorted(urls.keys()):
-        for url in urls[page]:
+# Acccepts a URL, filenun, and page num as input
+# Returns a list of [filenum, pagenum, url, HTTP response code, string/note]
+def testurl(url, filenum, pagenum):
+    code="ERR" # Default unless valid response
+    note="" # Default no note
 
-            url = url.encode('ascii', 'ignore').decode('utf-8')
+    headers = { 'User-Agent' : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36' }
+    http = urllib3.PoolManager(timeout=TIMEOUT)
+    try:
+        r=http.request('GET', url, headers=headers, retries=urllib3.Retry(redirect=MAXREDIRECT))
+        code=r.status
+    except urllib3.exceptions.ConnectTimeoutError as e:
+        note=f"Timeout of {MAXTIMEOUT} seconds exceeded connecting to server"
+    except urllib3.exceptions.ReadTimeoutError as e:
+        note=f"Timeout of {MAXTIMEOUT} seconds exceeded waiting for read response"
+    except urllib3.exceptions.MaxRetryError as e:
+        note=f"Maximum retry failure exceeded (possible bad server name)"
+    except Exception as e:
+        note=f"Unrecognized error accessing URL: {str(type(exc))}"
 
-            # Add default URI for www.anything
-            if url[0:3] == "www": url="http://"+url
+    return [filenum, pagenum, url, code, note]
 
-            # Some authors include URLs in the form http://www.josh.net.[1], http://www.josh.net[1]. or http://www.josh.net[1] 
-            # Remove the footnote and/or leading or trailing dot.
-            footnote=re.compile(r"(\.\[\d+\]|\[\d+\]\.|\[\d+\])")
-            if re.search(footnote, url):
-                url=re.sub(footnote, "", url)
+def printerrex(msg):
+    sys.stdout.write(msg + "\n")
 
-            # Remove a trailing period
-            if url[-1] == ".":
-                url = url[:-1]
+    if os.name == 'nt':
+        x=input("Press Enter to exit.")
 
-            # Skip private IP addresses and localhost
-            privateaddr = re.compile(r'(\S+127\.)|(\S+192\.168\.)|(\S+10\.)|(\S+172\.1[6-9]\.)|(\S+172\.2[0-9]\.)|(\S+172\.3[0-1]\.)|(\S+::1)')
-            if re.match(privateaddr, url): continue
-            if ("://localhost" in url): continue
+    sys.exit(-1)
 
-            headers = { 'User-Agent' : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36' }
-            http = urllib3.PoolManager(timeout=MAXTIMEOUT)
-            try:
-                r=http.request('GET', url, headers=headers, retries=urllib3.Retry(redirect=MAXREDIRECT))
-                code=r.status
-            except urllib3.exceptions.ConnectTimeoutError as e:
-                print(f"ERR : {url}, Page {page}")
-                csvwriter.writerow([filenum, page, "ERR", url,
-                        f"Timeout of {MAXTIMEOUT} seconds exceeded connecting to server"])
-                continue
-            except urllib3.exceptions.ReadTimeoutError as e:
-                print(f"ERR : {url}, Page {page}")
-                csvwriter.writerow([filenum, page, "ERR", url,
-                        f"Timeout of {MAXTIMEOUT} seconds exceeded waiting for read response"])
-                continue
-            except urllib3.exceptions.MaxRetryError as e:
-                print(f"ERR : {url}, Page {page}")
-                csvwriter.writerow([filenum, page, "ERR", url, f"Maximum redirect of {MAXREDIRECT} exceeded"])
-                continue
-            except Exception as e:
-                print(f"ERR : {url}, Page {page}")
-                csvwriter.writerow([filenum, page, "ERR", url, "Error accessing URL"])
-                continue
-
-            # By default we don't report on URLs that return a 200 message, but this can be overidden with an env var
-            if code == 200 and SKIP200 == 1:
-                continue
-
-            print(f"{code} : {url}, Page {filenum}:{page}")
-            csvwriter.writerow([filenum, page, code, url])
 
 if __name__ == "__main__":
     if (len(sys.argv) == 1):
-        print("Validate URLs in the notes and slides of a PowerPoint pptx file. (version 1.2)")
+        print("Validate URLs in the notes and slides of one or more PowerPoint pptx files. (version 2.0)")
         print("Check GitHub for updates: http://github.com/joswr1ght/pptxurlcheck\n")
         if os.name == 'nt':
-            print("Usage: pptxurlcheck.exe [pptx file]")
+            print("Usage: pptxurlcheck.exe [pptx file(s)]")
         else:
-            print("Usage: pptxurlcheck.py [pptx file]")
+            print("Usage: pptxurlcheck.py [pptx file(s)]")
         sys.exit(1)
 
     signal.signal(signal.SIGINT, signal_exit)
@@ -221,22 +230,50 @@ if __name__ == "__main__":
     # Disable urllib3 InsecureRequestWarning
     urllib3.disable_warnings()
 
-    SKIP200=int(os.getenv('SKIP200', 1))
+    # Make a list of URLs across all PPTX files capturing [PPTX#,PAGE#,URL]
+    # TODO: Check each file for PPTX filename extension first
+    for filename in sys.argv[1:]:
+        if (os.path.splitext(filename)[1] != ".pptx"):
+            printerrex(f"Invalid PPTX file supplied: {filename}")
 
-    filenum=0
-    with open(f"{os.path.splitext(sys.argv[1])[0]}-URLREPORT.csv", mode='w') as csv_report:
+    # Build dictionary of URLs
+    urls = parsepptx(sys.argv[1:])
+
+    urlchkres = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=CONNECTIONS) as executor:
+        # The urls data object is url:[filenum, pagenum]
+        futureurl = (executor.submit(testurl, url, urls[url][0], urls[url][1]) for url in urls)
+        for future in concurrent.futures.as_completed(futureurl):
+            try:
+                data = future.result()
+            except Exception as exc:
+                data = [str(type(exc))]
+            finally:
+                urlchkres.append(data)
+                print(str(len(urlchkres)),end="\r")
+
+
+    # Sort list by file num, page num
+    urlchkres=sorted(urlchkres, key=lambda x: (x[0], x[1]))
+
+    skip200=int(os.getenv('SKIP200', 1))
+
+    reportfilename=f"{os.path.split(sys.argv[1])[0] + os.sep}pptxurlreport.csv"
+    with open(reportfilename, mode='w') as csv_report:
         csvwriter = csv.writer(csv_report)
         csvwriter.writerow(["File#","Page","Response","URL","Note"])
+        # Loop through results to make CSV report
+        for urldata in urlchkres:
+            filenum=urldata[0]
+            pagenum=urldata[1]
+            url=urldata[2]
+            response=urldata[3]
+            note=urldata[4]
+            if (skip200==1 and response==200):
+                continue
+            csvwriter.writerow([filenum,pagenum,response,url,note])
 
-        for pptxfile in sys.argv[1:]:
-            filenum+=1
-            urls = parseslidenotes(pptxfile)
-
-            # Deduplicate URLs on a single page (but not across pages)
-            for key in urls:
-                urls[key] = list(dict.fromkeys(urls[key]))
-
-            testurls(urls, csvwriter, filenum)
+    print(f"URL validation report created at {reportfilename}.")
 
     if os.name == 'nt':
         x=input("Press Enter to exit.")
