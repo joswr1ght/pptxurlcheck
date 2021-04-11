@@ -293,7 +293,7 @@ if __name__ == "__main__":
                 continue
             csvwriter.writerow([filenum,pagenum,response,url,note])
 
-    print(f"URL validation report created at {reportfilename}.")
+    print(f"URL validation report created at {reportfilename}")
 
     if os.name == 'nt':
         x=input("Press Enter to exit.")
