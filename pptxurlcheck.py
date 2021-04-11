@@ -9,7 +9,6 @@ import re
 import os
 import shutil
 import tempfile
-import urllib3
 import glob
 import csv
 import concurrent.futures
@@ -19,17 +18,12 @@ import signal
 from zipfile import ZipFile
 from xml.dom.minidom import parse
 
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
 MAXREDIRECT=10
 TIMEOUT=5
 CONNECTIONS=20
-
-# Attempt to add SNI support
-try:
-    import urllib3.contrib.pyopenssl
-    urllib3.contrib.pyopenssl.inject_into_urllib3()
-except ImportError:
-    pass
-
 
 # Remove trailing unwanted characters from the end of URL's
 # This is a recursive function. Did I do it well? I don't know.
@@ -37,7 +31,7 @@ def striptrailingchar(s):
     # The valid URL charset is A-Za-z0-9-._~:/?#[]@!$&'()*+,;= and & followed by hex character
     # I don't have a better way to parse URL's from the cruft that I get from XML content, so I
     # also remove .),;'? too.  Note that this is only the end of the URL (making ? OK to remove)
-    if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~:#[]@!$&()*+=/":
+    if s[-1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~#[]@!$&(*+=/":
         s = striptrailingchar(s[0:-1])
     elif s[-5:] == "&quot":
         s = striptrailingchar(s[0:-5])
@@ -115,8 +109,11 @@ def parsepptx(pptxfiles):
                     url = url[:-1]
 
                 # Skip private IP addresses and localhost
-                privateaddr = re.compile(r'(\S+127\.)|(\S+192\.168\.)|(\S+10\.)|(\S+172\.1[6-9]\.)|(\S+172\.2[0-9]\.)|(\S+172\.3[0-1]\.)|(\S+::1)')
+                privateaddr = re.compile(r'(\S+127\.)|(\S+169\.254\.)|(\S+192\.168\.)|(\S+10\.)|(\S+172\.1[6-9]\.)|(\S+172\.2[0-9]\.)|(\S+172\.3[0-1]\.)|(\S+::1)')
                 if re.match(privateaddr, url):
+                    continue
+
+                if "://localhost" in url:
                     continue
 
                 url = url.encode('ascii', 'ignore').decode('utf-8')
@@ -166,8 +163,11 @@ def parsepptx(pptxfiles):
                         url=re.sub(footnote, "", url)
 
                     # Skip private IP addresses and localhost
-                    privateaddr = re.compile(r'(\S+127\.)|(\S+192\.168\.)|(\S+10\.)|(\S+172\.1[6-9]\.)|(\S+172\.2[0-9]\.)|(\S+172\.3[0-1]\.)|(\S+::1)')
+                    privateaddr = re.compile(r'(\S+127\.)|(\S+169\.254\.)|(\S+192\.168\.)|(\S+10\.)|(\S+172\.1[6-9]\.)|(\S+172\.2[0-9]\.)|(\S+172\.3[0-1]\.)|(\S+::1)')
                     if re.match(privateaddr, url):
+                        continue
+
+                    if "://localhost" in url:
                         continue
 
                     url = url.encode('ascii', 'ignore').decode('utf-8')
@@ -190,19 +190,33 @@ def testurl(url, filenum, pagenum):
     code="ERR" # Default unless valid response
     note="" # Default no note
 
-    headers = { 'User-Agent' : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.102 Safari/537.36' }
-    http = urllib3.PoolManager(timeout=TIMEOUT)
+    headers = { 'User-Agent' : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 11_2_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Safari/537.36' }
     try:
-        r=http.request('GET', url, headers=headers, retries=urllib3.Retry(redirect=MAXREDIRECT))
-        code=r.status
-    except urllib3.exceptions.ConnectTimeoutError as e:
-        note=f"Timeout of {MAXTIMEOUT} seconds exceeded connecting to server"
-    except urllib3.exceptions.ReadTimeoutError as e:
-        note=f"Timeout of {MAXTIMEOUT} seconds exceeded waiting for read response"
-    except urllib3.exceptions.MaxRetryError as e:
-        note=f"Maximum retry failure exceeded (possible bad server name)"
+        r=requests.get(url, timeout=TIMEOUT, verify=False, headers=headers)
+        code=r.status_code
+    except requests.exceptions.HTTPError as e:
+        note="An unspecified HTTP error occurred."
+    except requests.exceptions.ConnectionError as e:
+        note="A connection error occurred (possible bad hostname)."
+    except requests.exceptions.ConnectTimeout as e:
+        note="A timeout error occurred creating a connection to the server."
+    except requests.exceptions.ReadTimeout as e:
+        note="A timeout error occurred when waiting for a read response from the server."
+    except requests.exceptions.InvalidURL as e:
+        note="The URL is not valid."
+    except requests.exceptions.URLRequired as e:
+        note="The URL is not valid."
+    except requests.exceptions.TooManyRedirects as e:
+        note="A connection error occurred from too many server redirects."
     except Exception as e:
-        note=f"Unrecognized error accessing URL: {str(type(exc))}"
+        note=f"Unrecognized error accessing URL: {sys.exc_info()[1]}"
+
+    if (code == 404):
+        note="The URL returned a 404 File Not Found response (no such page on the server)."
+    elif (code == 403):
+        note="The URL returned a 403 Forbidden error (the server refuses to authorize the URL request)."
+    elif (code == 400):
+        note="The URL returned a 400 Bad Request error (the URL may not be intended to visited using a standard browser)."
 
     return [filenum, pagenum, url, code, note]
 
@@ -216,6 +230,7 @@ def printerrex(msg):
 
 
 if __name__ == "__main__":
+
     if (len(sys.argv) == 1):
         print("Validate URLs in the notes and slides of one or more PowerPoint pptx files. (version 2.0)")
         print("Check GitHub for updates: http://github.com/joswr1ght/pptxurlcheck\n")
@@ -227,11 +242,7 @@ if __name__ == "__main__":
 
     signal.signal(signal.SIGINT, signal_exit)
 
-    # Disable urllib3 InsecureRequestWarning
-    urllib3.disable_warnings()
-
-    # Make a list of URLs across all PPTX files capturing [PPTX#,PAGE#,URL]
-    # TODO: Check each file for PPTX filename extension first
+    # Check each file supplied to make sure it has the .pptx extension
     for filename in sys.argv[1:]:
         if (os.path.splitext(filename)[1] != ".pptx"):
             printerrex(f"Invalid PPTX file supplied: {filename}")
@@ -247,18 +258,27 @@ if __name__ == "__main__":
             try:
                 data = future.result()
             except Exception as exc:
-                data = [str(type(exc))]
+                data = [sys.exc_info()]
             finally:
                 urlchkres.append(data)
                 print(str(len(urlchkres)),end="\r")
 
+    #print(urlchkres)
 
     # Sort list by file num, page num
     urlchkres=sorted(urlchkres, key=lambda x: (x[0], x[1]))
 
+    # If SKIP200=0 in the env then we create the CSV with all URLs, not just problem URLs
     skip200=int(os.getenv('SKIP200', 1))
 
-    reportfilename=f"{os.path.split(sys.argv[1])[0] + os.sep}pptxurlreport.csv"
+    # Get the report filename for the CSV, placing it in the dir where the PPTX files are
+    basedir,fpptxfile = os.path.split(sys.argv[1])
+    if basedir == '': # Relative directory
+        reportfilename="pptxurlreport.csv"
+    else:
+        reportfilename=f"{basedir + os.sep}pptxurlreport.csv"
+
+    # Open and generate the CSV report
     with open(reportfilename, mode='w') as csv_report:
         csvwriter = csv.writer(csv_report)
         csvwriter.writerow(["File#","Page","Response","URL","Note"])
