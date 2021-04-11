@@ -1,0 +1,6 @@
+# Developer Notes
+
+aka Reminders to _do this thing_
+
++ Some URL-permitted characters are stripped from the end of the URL such as `.` and `)`. How do programs know a
+  trailing `.` is not part of the URL but part of the sentence around it?
