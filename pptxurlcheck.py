@@ -22,7 +22,7 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 MAXREDIRECT=10
-TIMEOUT=5
+TIMEOUT=10
 CONNECTIONS=20
 
 # Remove trailing unwanted characters from the end of URL's
@@ -195,7 +195,7 @@ def testurl(url, filenum, pagenum):
     except requests.exceptions.ConnectionError as e:
         note="A connection error occurred (possible bad hostname)."
     except requests.exceptions.ConnectTimeout as e:
-        note="A timeout error occurred creating a connection to the server."
+        note="A timeout error occurred creating a connection to the server (possible slow server or slow internet connection)."
     except requests.exceptions.ReadTimeout as e:
         note="A timeout error occurred when waiting for a read response from the server."
     except requests.exceptions.InvalidURL as e:
@@ -276,7 +276,7 @@ if __name__ == "__main__":
 
     # Open and generate the CSV report
     with open(reportfilename, mode='w') as csv_report:
-        csvwriter = csv.writer(csv_report)
+        csvwriter = csv.writer(csv_report, lineterminator='\n')
         csvwriter.writerow(["File#","Page","Response","URL","Note"])
         # Loop through results to make CSV report
         for urldata in urlchkres:
