@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0
+
+  + Add support for multiple PPTX files in one invocation
+  + Refactor code to deduplicate URLs across all files; check each URL once
+  + Add threading support for a big performance boost
+  + Instead of displaying results to the screen, generate a CSV report
+
 ## 1.2
 
   + Removed dependency on python-pptx, adding code to parse slide bullets
