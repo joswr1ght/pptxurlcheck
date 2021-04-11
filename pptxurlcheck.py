@@ -88,39 +88,35 @@ def parsepptx(pptxfiles):
             # then concatenate each paragraph delimited by a space.
             paragraphs = dom.getElementsByTagName('a:p')
             for paragraph in paragraphs:
-                textblocks = paragraph.getElementsByTagName('a:t')
-                for textblock in textblocks:
-                    slideText += textblock.toxml().replace('<a:t>','').replace('</a:t>','')
-                slideText += " "
+                paragraphtext = ""
+                parse_node(paragraph)
+                urlmatches = re.findall(urlmatchre, paragraphtext)
 
-            # Parse URL content from notes text for the current paragraph
-            urlmatches = re.findall(urlmatchre, slideText)
+                for urlmatch in urlmatches:  # Now it's a tuple
+                    # Remove regex match artifacts at the end of the URL: www.sans.org,
+                    url = striptrailingchar(urlmatch[0])
 
-            for urlmatch in urlmatches:  # Now it's a tuple
-                # Remove regex match artifacts at the end of the URL: www.sans.org,
-                url = striptrailingchar(urlmatch[0])
+                    # Add default URI for www.anything
+                    if url[0:3] == "www":
+                        url = "http://" + url
 
-                # Add default URI for www.anything
-                if url[0:3] == "www":
-                    url = "http://" + url
+                    # Remove a trailing period
+                    if url[-1] == ".":
+                        url = url[:-1]
 
-                # Remove a trailing period
-                if url[-1] == ".":
-                    url = url[:-1]
+                    # Skip private IP addresses and localhost
+                    privateaddr = re.compile(r'(\S+127\.)|(\S+169\.254\.)|(\S+192\.168\.)|(\S+10\.)|(\S+172\.1[6-9]\.)|(\S+172\.2[0-9]\.)|(\S+172\.3[0-1]\.)|(\S+::1)')
+                    if re.match(privateaddr, url):
+                        continue
 
-                # Skip private IP addresses and localhost
-                privateaddr = re.compile(r'(\S+127\.)|(\S+169\.254\.)|(\S+192\.168\.)|(\S+10\.)|(\S+172\.1[6-9]\.)|(\S+172\.2[0-9]\.)|(\S+172\.3[0-1]\.)|(\S+::1)')
-                if re.match(privateaddr, url):
-                    continue
+                    if "://localhost" in url:
+                        continue
 
-                if "://localhost" in url:
-                    continue
+                    url = url.encode('ascii', 'ignore').decode('utf-8')
 
-                url = url.encode('ascii', 'ignore').decode('utf-8')
-
-                # Add this URL to the hash
-                if not url in urls:
-                    urls[url] = [filenum, slidenum]
+                    # Add this URL to the hash
+                    if not url in urls:
+                        urls[url] = [filenum, slidenum]
 
 
         # Process notes content in slides
