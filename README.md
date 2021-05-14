@@ -65,8 +65,8 @@ URL validation report created at pptxurlreport.csv
 ## Platforms
 
 Tested on Windows 10, macOS 11.2, and Debian-based Linux. Windows binary
-included in the `bin/` directory, built with `pyinstaller --onefile --hidden-import urllib3
-pptxurlcheck.py` using Python 3.9.4.
+included in the `bin/` directory, built with `pyinstaller --onefile --hidden-import urllib3 --hidden-import requests
+pptxurlcheck.py` using Python 3.9.5.
 
 ## Questions, Comments, Concerns?
 
