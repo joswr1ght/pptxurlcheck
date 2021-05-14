@@ -1,4 +1,4 @@
-# pptxrlcheck
+# pptxurlcheck
 
 Parse a PowerPoint PPTX file, extracting all URLs from notes and slides, and
 test for validity returning ERR or the non-OK HTTP status code.
