@@ -227,8 +227,10 @@ def printerrex(msg):
 
 if __name__ == "__main__":
 
+    urlignore = [] # List of URLs to ignore, may be empty
+
     if (len(sys.argv) == 1):
-        print("Validate URLs in the notes and slides of one or more PowerPoint pptx files. (version 2.0)")
+        print("Validate URLs in the notes and slides of one or more PowerPoint pptx files. (version 2.1)")
         print("Check GitHub for updates: http://github.com/joswr1ght/pptxurlcheck\n")
         if os.name == 'nt':
             print("Usage: pptxurlcheck.exe [pptx file(s)]")
@@ -240,11 +242,21 @@ if __name__ == "__main__":
 
     # Check each file supplied to make sure it has the .pptx extension
     for filename in sys.argv[1:]:
-        if (os.path.splitext(filename)[1] != ".pptx"):
+        if (os.path.splitext(filename)[1] == ".txt"):
+            # Treat this file as a list of URLs to ignore
+            with open(filename, 'r') as urllistfd:
+                urlignore = [line.strip() for line in urllistfd.readlines()]
+            sys.argv.remove(filename) # Remove .txt file from array
+        elif (os.path.splitext(filename)[1] != ".pptx"):
             printerrex(f"Invalid PPTX file supplied: {filename}")
 
     # Build dictionary of URLs
     urls = parsepptx(sys.argv[1:])
+
+    # Remove URLs in exclusion list
+    for url in urlignore:
+        if url in urls:
+            urls.pop(url)
 
     urlchkres = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=CONNECTIONS) as executor:
