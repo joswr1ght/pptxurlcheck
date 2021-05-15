@@ -112,6 +112,11 @@ def parsepptx(pptxfiles):
                     if "://localhost" in url:
                         continue
 
+                    # Skip .onion and .i2p domains
+                    anondomain = re.compile(r'\.onion$|\.onion\/|\.i2p$|\.i2p\/')
+                    if re.match(anondomain, url):
+                        continue
+
                     url = url.encode('ascii', 'ignore').decode('utf-8')
 
                     # Add this URL to the hash
@@ -164,6 +169,11 @@ def parsepptx(pptxfiles):
                         continue
 
                     if "://localhost" in url:
+                        continue
+
+                    # Skip .onion and .i2p domains
+                    anondomain = re.compile(r'\.onion$|\.onion\/|\.i2p$|\.i2p\/')
+                    if re.findall(anondomain, url):
                         continue
 
                     url = url.encode('ascii', 'ignore').decode('utf-8')
