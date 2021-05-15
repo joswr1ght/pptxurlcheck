@@ -46,9 +46,19 @@ C:\>pptxurlcheck SEC561.pptx
 ...
 ```
 
+## Ignored URLs
+
+Pptxurlcheck ignores several URL patterns that don't make sense for validation
+purposes:
+
++ RFC1918 private IP addresses
++ Loopback IP addresses
++ localhost
++ Domains ending in .onion and .i2p
+
 Optionally, a file ending with a `.txt` extension may be added at any position
-in the command line. This file should include a list of URLs to ignore from
-the URL check report, one per line. The URL in the ignore file must be an exact
+in the command line. This file should include a list of URLs to ignore from the
+URL check report, one per line. The URL in the ignore file must be an exact
 match for the URL in the PowerPoint file to be ignored:
 
 ```
