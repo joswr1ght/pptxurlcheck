@@ -204,6 +204,8 @@ def signal_exit(signal, frame):
 # Acccepts a URL, filenun, and page num as input
 # Returns a list of [filenum, pagenum, url, HTTP response code, string/note]
 def testurl(url, filenum, pagenum):
+    ua = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, '
+          'like Gecko) Chrome/134.0.0.0 Safari/537.36')
     code = 'ERR'  # Default unless valid response
     note = ''     # Default no note
 
