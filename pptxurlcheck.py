@@ -210,8 +210,26 @@ def testurl(url, filenum, pagenum):
     note = ''     # Default no note
 
     headers = {
-        'User-Agent': ('Mozilla/5.0 (Macintosh; Intel Mac OS X 11_2_3) AppleWebKit/537.36 (KHTML, '
-                       'like Gecko) Chrome/89.0.4389.114 Safari/537.36')}
+        'User-Agent': ua,
+        }
+
+    try:
+        r = requests.head(url, timeout=TIMEOUT, verify=False, headers=headers)
+        code = r.status_code
+    except:  # noqa
+        pass
+
+    if (code == 200):
+        return [filenum, pagenum, url, code, note]
+    elif (code == 404):
+        note = 'The URL returned a 404 File Not Found response (no such page on the server).'
+        return [filenum, pagenum, url, code, note]
+
+    # If we get anything else, rule out that the server is returning a bad HTTP resposne for HEAD
+    # by trying a GET request.
+    # We add the Range header to avoid downloading the entire file
+    headers['Range'] = 'bytes=0-0'
+
     try:
         r = requests.get(url, timeout=TIMEOUT, verify=False, headers=headers)
         code = r.status_code
@@ -233,8 +251,15 @@ def testurl(url, filenum, pagenum):
     except Exception:
         note = f'Unrecognized error accessing URL: {sys.exc_info()[1]}'
 
-    if (code == 404):
+    if (code == 200):
+        return [filenum, pagenum, url, code, note]
+    elif (code == 206):
+        # We're going to cheat and treat a 206 (Partial Content) as a 200 (OK)
+        code = 200
+        return [filenum, pagenum, url, code, note]
+    elif (code == 404):
         note = 'The URL returned a 404 File Not Found response (no such page on the server).'
+        return [filenum, pagenum, url, code, note]
     elif (code == 403):
         note = 'The URL returned a 403 Forbidden error (the server refuses to authorize the URL request).'
     elif (code == 400):
