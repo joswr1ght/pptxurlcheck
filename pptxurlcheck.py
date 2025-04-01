@@ -285,7 +285,7 @@ if __name__ == '__main__':
     urlignore = []  # List of URLs to ignore, may be empty
 
     if (len(sys.argv) == 1):
-        print('Validate URLs in the notes and slides of one or more PowerPoint pptx files. (version 2.1)')
+        print('Validate URLs in the notes and slides of one or more PowerPoint pptx files. (version 2.2)')
         print('Check GitHub for updates: http://github.com/joswr1ght/pptxurlcheck\n')
         if os.name == 'nt':
             print('Usage: pptxurlcheck.exe [pptx file(s)]')
