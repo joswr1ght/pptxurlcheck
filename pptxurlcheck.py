@@ -17,30 +17,11 @@ import re
 import sys
 SKIP200 = 1
 
-# import pdb
-
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 MAXREDIRECT = 10
 TIMEOUT = 10
 CONNECTIONS = 20
-
-# Remove trailing unwanted characters from the end of URL's
-# This is a recursive function. Did I do it well? I don't know.
-
-
-def striptrailingchar(s):
-    # The valid URL charset is A-Za-z0-9-._~:/?#[]@!$&'()*+,;= and & followed by hex character
-    # I don't have a better way to parse URL's from the cruft that I get from XML content, so I
-    # also remove .),;'? too.  Note that this is only the end of the URL (making ? OK to remove)
-    if s[-1] not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZZabcdefghijklmnopqrstuvwxyzz0123456789-_~#[]@!$&(*+=/':
-        s = striptrailingchar(s[0:-1])
-    elif s[-5:] == '&quot':
-        s = striptrailingchar(s[0:-5])
-    else:
-        pass
-    return s
-
 
 # Parse the given root recursively (root is intended to be the paragraph element <a:p>
 # If we encounter a link-break element a:br, add a new line to global paragraphtext
@@ -61,12 +42,29 @@ def parse_node(root):
                 parse_node(node)
 
 
+def trimurl(url):
+    """
+    Remove extraneous trailing punctuation.
+
+    First, strip common trailing punctuation (. , ; : ! ?).
+    Then, while the URL ends with a ')' and there are more closing than opening
+    parentheses in the URL (indicating an extra trailing parenthesis), remove one.
+    """
+    # Remove trailing punctuation except for parentheses
+    trailing_punc = ".,;:!?"
+    url = url.rstrip(trailing_punc)
+    # Remove any unmatched trailing closing parentheses.
+    while url.endswith(')') and url.count('(') < url.count(')'):
+        url = url[:-1]
+    return url
+
+
 # Accepts a list of PowerPoint files in pptxfiles.
 # Returns a hash of links indexed by URL with [filenum,pagenum] as the value.
 # Reads slide notes and slide text boxes and other text elements.
 def parsepptx(pptxfiles):
     global paragraphtext
-    urlmatchre = re.compile(r'((https?://[^\s<>"]+|www\.[^\s<>"]+))', re.DOTALL)
+    urlmatchre = r'(?:^|[\s(<])(?P<url>(?:(?:https?):\/\/|www\.)\S+)'
 
     urls = {}
     filenum = 0
@@ -96,19 +94,17 @@ def parsepptx(pptxfiles):
             for paragraph in paragraphs:
                 paragraphtext = ''
                 parse_node(paragraph)
-                urlmatches = re.findall(urlmatchre, paragraphtext)
+                urlmatches = re.finditer(urlmatchre, paragraphtext)
 
                 for urlmatch in urlmatches:  # Now it's a tuple
+                    url = urlmatch.group('url')
+
                     # Remove regex match artifacts at the end of the URL: www.sans.org,
-                    url = striptrailingchar(urlmatch[0])
+                    url = trimurl(url)
 
                     # Add default URI for www.anything
                     if url[0:3] == 'www':
                         url = 'http://' + url
-
-                    # Remove a trailing period
-                    if url[-1] == '.':
-                        url = url[:-1]
 
                     # Skip private IP addresses and localhost
                     privateaddr = re.compile(
@@ -148,11 +144,12 @@ def parsepptx(pptxfiles):
                 parse_node(paragraph)
 
                 # Parse URL content from notes text for the current paragraph
-                urlmatches = re.findall(urlmatchre, paragraphtext)
+                urlmatches = re.finditer(urlmatchre, paragraphtext)
 
                 for urlmatch in urlmatches:  # Now it's a tuple
+                    url = urlmatch.group('url')
                     # Remove regex match artifacts at the end of the URL: www.sans.org,
-                    url = striptrailingchar(urlmatch[0])
+                    url = trimurl(url)
 
                     # Add default URI for www.anything
                     if url[0:3] == 'www':
@@ -204,6 +201,7 @@ def signal_exit(signal, frame):
 # Acccepts a URL, filenun, and page num as input
 # Returns a list of [filenum, pagenum, url, HTTP response code, string/note]
 def testurl(url, filenum, pagenum):
+
     ua = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, '
           'like Gecko) Chrome/134.0.0.0 Safari/537.36')
     code = 'ERR'  # Default unless valid response
@@ -225,9 +223,9 @@ def testurl(url, filenum, pagenum):
         note = 'The URL returned a 404 File Not Found response (no such page on the server).'
         return [filenum, pagenum, url, code, note]
 
-    # If we get anything else, rule out that the server is returning a bad HTTP resposne for HEAD
-    # by trying a GET request.
-    # We add the Range header to avoid downloading the entire file
+    # If we get anything other than a 200 or 404, rule out that the server is
+    # returning a bad HTTP resposne for HEAD by trying a GET request.
+    # Add the Range header to avoid downloading the entire file.
     headers['Range'] = 'bytes=0-0'
 
     try:
@@ -326,8 +324,6 @@ if __name__ == '__main__':
             finally:
                 urlchkres.append(data)
                 print(str(len(urlchkres)), end='\r')
-
-    # print(urlchkres)
 
     # Sort list by file num, page num
     urlchkres = sorted(urlchkres, key=lambda x: (x[0], x[1]))
