@@ -110,10 +110,8 @@ def parse_pptx(pptxfiles):
         tmpd = tempfile.mkdtemp()
         try:
             ZipFile(pptxfile).extractall(path=tmpd, pwd=None)
-        except FileNotFoundError:
-            pass
         except:  # noqa
-            print(f'Cannot extract data from specified PowerPoint file {pptxfile}: f{sys.exc_info()}. Exiting.')
+            flash(f'Cannot extract data from specified PowerPoint file {pptxfile}: f{sys.exc_info()}. Exiting.')
 
         # Parse slide content first
         path = tmpd + os.sep + 'ppt' + os.sep + 'slides' + os.sep
@@ -337,7 +335,6 @@ def process_pptx_files(file_paths):
                 data = [sys.exc_info()]
             finally:
                 urlchkres.append(data)
-                # print(str(len(urlchkres)), end='\r')
 
     # Sort list by file num, page num
     urlchkres = sorted(urlchkres, key=lambda x: (x[0], x[1]))
@@ -374,11 +371,8 @@ def index():
             flash(f"An error occurred during processing: {str(e)}")
             return redirect(request.url)
 
-        # Process the saved files, building CSV output
-        print("Processing files...")
-        print(saved_files)
-
         output_text = process_pptx_files(saved_files)
+
         output_io = io.BytesIO(output_text.encode('utf-8'))
         output_io.seek(0)
 
@@ -394,14 +388,12 @@ def index():
         return render_template_string(html_template)
 
 
-# HTML template using Materialize CSS with a single drag-and-drop box.
 html_template = """
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>PPTX URL Check</title>
-    <!-- Materialize CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <style>
@@ -436,7 +428,7 @@ html_template = """
 <body>
     <nav>
       <div class="nav-wrapper teal">
-        <a href="#" class="brand-logo center">PPTX URL Check</a>
+        <a href="/" class="brand-logo center">PPTX URL Check</a>
       </div>
     </nav>
     <main>
@@ -454,6 +446,9 @@ html_template = """
           <form class="col s12" method="POST" enctype="multipart/form-data">
             <!-- Hidden file input element -->
             <input type="file" name="files[]" id="fileInput" multiple accept=".pptx" style="display: none;">
+            <div class="center">
+                <h5 id="pleaseWait">&nbsp;</h5>
+            </div>
             <!-- Single drag-and-drop box -->
             <div class="dropzone" id="dropzone">
                 Drag and drop PPTX files here (or click to select)
@@ -465,9 +460,6 @@ html_template = """
               </button>
             </div>
           </form>
-        </div>
-        <div id="pleaseWait" class="center" style="display: none;">
-            <h5>Please wait while processing...</h5>
         </div>
       </div>
     </main>
@@ -495,12 +487,8 @@ html_template = """
         dropzone.addEventListener('drop', function(e) {
             e.preventDefault();
             dropzone.classList.remove('hover');
-            // Use DataTransfer to get files from the drop event
             const dt = e.dataTransfer;
-            // Create a DataTransfer object to simulate setting fileInput.files
             let files = dt.files;
-            // Due to browser restrictions, we cannot programmatically set fileInput.files directly.
-            // Instead, we'll update the file list display and rely on the user to submit.
             fileInput.files = files;
             updateFileList();
         });
@@ -520,7 +508,7 @@ html_template = """
         // Show "Please wait" message on form submission
         var form = document.querySelector('form');
         form.addEventListener('submit', function(e) {
-            document.getElementById('pleaseWait').style.display = 'block';
+            document.getElementById('pleaseWait').innerHTML = 'Please wait...';
         });
     </script>
 </body>
