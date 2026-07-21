@@ -1,5 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 # -*- coding: utf-8 -*-
+#
+# /// script
+# requires-python = ">=3.8"
+# dependencies = [
+#     "requests",
+# ]
+# ///
 #
 # With code by Eric Jang ericjang2004@gmail.com
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -137,7 +144,7 @@ def parsepptx(pptxfiles):
             # parse each XML notes file from the notes folder.
 
             # Get the slide number
-            slidenum = int(re.search('notesSlide(\d+)\.xml', infile).group(1))  # noqa
+            slidenum = int(re.search(r'notesSlide(\d+)\.xml', infile).group(1))
 
             # Parse slide notes, adding a space after each paragraph marker, and
             # removing XML markup
